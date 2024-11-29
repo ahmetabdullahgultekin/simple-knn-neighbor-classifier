@@ -53,7 +53,6 @@ def add_data_to_json(data, target_value_counts):
         for column in data.drop(columns=[TARGET_COLUMN]).columns:
             values_file.write(data.groupby([column, TARGET_COLUMN]).size().to_json() + ',')
             # Do not add comma at the end
-            # values_file.write((data.groupby([column, TARGET_COLUMN]).size() / data.groupby(TARGET_COLUMN).size()).to_json() + ',')
             if column == data.drop(columns=[TARGET_COLUMN]).columns[-1]:
                 values_file.write(
                     (data.groupby([column, TARGET_COLUMN]).size() / data.groupby(TARGET_COLUMN).size()).to_json())
@@ -62,6 +61,15 @@ def add_data_to_json(data, target_value_counts):
                     (data.groupby([column, TARGET_COLUMN]).size() / data.groupby(TARGET_COLUMN).size()).to_json() + ',')
         values_file.write(']')
         values_file.write('}')
+
+
+# Update the json file with the new values of one-hot encoded dataset
+def generate_encoded_json_file(data):
+    # Open the json file in append mode
+    with open('encoded_values.json', 'w') as values_file:
+        encode_one_hot(data)
+        # Write the new dataset to the json file
+        values_file.write(data.to_json())
 
 
 # Print the values from the json file
@@ -89,66 +97,72 @@ def print_values_from_memory(target_value_counts, data):
         print(data.groupby([column, TARGET_COLUMN]).size() / data.groupby(TARGET_COLUMN).size())
         print('\n---------------------------------------------------------')
 
+
 # Calculate the distance between the new instance and the current row
-def calculate_distance(row, data, target_column):
+def calculate_distance(instance, data, target_column):
+    # Calculate the distances of each row
+    distances = []
     distance = 0
-    for column in data.drop(columns=[target_column]).columns:
-        if distance_metric == 0:
-            distance += (row[column] - data[column]) ** 2
-        elif distance_metric == 1:
-            distance += abs(row[column] - data[column])
-    return distance
+    j = 0
+    # Iterate each row of the target column
+    for target in data[target_column]:
+        # Calculate the distance of the new instance and the current row
+        print(f"Value: {target} - target_column: {target_column}")
+        for value in instance:
+            if value in data.columns:
+                print(f"Value: {value} is in the columns.")
+                if data[value][j] == 1:
+                    distance += 1
+                    print(f"Distance: {distance}")
+        j += 1
+        distances.append(distance)
+        distance = 0
+    # print(f"Distances: {distances}")
+    return distances
+
 
 # Train the KNN model
-def train_knn_model(data, target_column):
-    # KNN model
-    knn_model = []
-    # Iterate through the rows of the dataset
-    for index, row in data.iterrows():
-        # Calculate the distance between the new instance and the current row
-        distance = calculate_distance(row, data, target_column)
-        # Append the distance and the row to the KNN model
-        knn_model.append((distance, row))
-    # Sort the KNN model by distance
-    knn_model.sort(key=lambda x: x[0])
+def train_knn_model():
+    # Hash values with their indices
+    instance_distances = calculate_distance(new_prediction_data, data_set, TARGET_COLUMN)
+    instance_distances_with_indices = [(index, distance) for index, distance in enumerate(instance_distances)]
+    print("---------------------------------------------------------")
+    print("Training the KNN model...")
+    print("---------------------------------------------------------")
+    print("These are the distance points of the new instance for each row:")
+    print("HIGH POINTS ARE CLOSEST TO THE NEW INSTANCE!")
+    print(f"Distance Points: {instance_distances}")
+    print(f"Distance Points with indices: {instance_distances_with_indices}")
+    print("---------------------------------------------------------")
+    # sort the distances in descending order
+    instance_distances.sort(reverse=True)
+    instance_distances_with_indices.sort(key=lambda x: x[1], reverse=True)
+    print(f"Sorted Distance Points: {instance_distances}")
+    print(f"Sorted Distance Points with indices: {instance_distances_with_indices}")
+    neighbors_with_target_values = [(data_set[TARGET_COLUMN][instance_distances_with_indices[i][0]]) for i in
+                                    range(k_value)]
+    print(f"Neighbors with target values: {neighbors_with_target_values}")
+    for i in range(k_value):
+        # Select the k nearest neighbors
+        print(
+            f"Index: {instance_distances_with_indices[i][0]} - Distance Point: {instance_distances_with_indices[i][1]}")
+
+    # Count the occurrences of each class
+    occurrences = count_the_occurrences(neighbors_with_target_values)
     # Return the KNN model
-    return knn_model
+    return occurrences
 
 
 # List the classes of the new instance
-def predict_the_result(new_instance, target_column):
-    # total = P(Outlook = Sunny) * P(Temperature = Cool) * P(Humidity = High) * P(Wind = Strong) * P(PlayTennis = Yes)
-    sum_of_yes = 1
-    # total = P(Outlook = Sunny) * P(Temperature = Cool) * P(Humidity = High) * P(Wind = Strong) * P(PlayTennis = No)
-    sum_of_no = 1
-    # sum
-    prediction_value = 1
-    # Search the classes of the new instance in the json file
-    with open('values.json', 'r') as values_file:
-        values = json.load(values_file)
-        for value in values['Values']:
-            for key, instance in new_instance.items():
-                # ('Sunny', 'No') is the format in the json file
-                filter_string = f"('{instance}', '{target_column}')"
-                if filter_string in value:
-                    if 0 < value[filter_string] < 1:
-                        print(f"key: {key} - value: {instance} - likelihood: {value[filter_string]}")
-                        prediction_value *= value[filter_string]
-                        print("---------------------------------------------------------")
-                        print(f"Prediction value for {target_column}: {prediction_value}")
-                        """if target_column == 'Yes':
-                            sum_of_yes *= value[filter_string]
-                            print("---------------------------------------------------------")
-                            print(f"Sum of {target_column}: {sum_of_yes}")
-                        else:
-                            sum_of_no *= value[filter_string]
-                            print("---------------------------------------------------------")
-                            print(f"Sum of {target_column}: {sum_of_no}")"""
-
-    # Get the values of prediction from the model belongs to the new instance
-    # New values array
-    # new_values = [sum_of_yes, sum_of_no]
-    return prediction_value
+def count_the_occurrences(target_values):
+    # Count target occurrences
+    target_unique = data_set[TARGET_COLUMN].unique()
+    print(f"Unique targets: {target_unique}")
+    target_occurrences = {}
+    for target in target_unique:
+        target_occurrences[target] = target_values.count(target)
+    print(f"Target occurrences: {target_occurrences}")
+    return target_occurrences
 
 
 # Print the results
@@ -156,7 +170,7 @@ def print_results(new_values):
     print("---------------------------------------------------------")
     print(f"Result of the new instance: {new_values}")
     # Make the prediction
-    if new_prediction_classes[1] > new_prediction_classes[0]:
+    if new_values[1] > new_values[0]:
         print("Comparison: Yes > No ")
         print("The new instance is classified as 'Yes'.")
     else:
@@ -169,7 +183,7 @@ def assign_parameters():
     global k_value, distance_metric
     # K is a hyperparameter that you need to get from user.
     # Ask user to enter the value of K.
-    while k_value < 1:
+    while k_value < 1 or k_value > len(data_set):
         try:
             k_value = int(input("Enter the value of K: "))
         except ValueError:
@@ -194,24 +208,69 @@ def assign_parameters():
             print("Invalid distance metric.")
 
 
+def encode_one_hot(data):
+    # One-hot encoding
+    for column in data.columns:
+        unique_values = data[column].unique()  # Get unique values in the column
+        print(f'Unique values in the {column} column:')
+        print(unique_values)
+        for value in unique_values:
+            # Create a new column for each unique value
+            data[f"{column}_{value}"] = (data[column] == value).astype(int)
+            print(f"Column {column}_{value} is created.")
+    print('---------------------------------------------------------\n')
+    print('One-hot encoded dataset:')
+    print(data)
+    print('\n---------------------------------------------------------')
+    return data
+
+
+# Encode the new instance
+def encode_new_instance(new_instance):
+    new_instance_encoded = {}
+    for key, value in new_instance.items():
+        new_instance_encoded[f"{key}_{value}"] = 1
+    return new_instance_encoded
+
+
+def predict_result():
+    predict_the_class = max(knn_model, key=knn_model.get)
+    if knn_model[predict_the_class] == 0:
+        print("---------------------------------------------------------")
+        print("Prediction cannot be made.")
+        print("No class has any occurrences.")
+        print("---------------------------------------------------------")
+        return
+    # Check the equality of the values
+    if knn_model['Yes'] == knn_model['No']:
+        print("---------------------------------------------------------")
+        print("Prediction cannot be made.")
+        print("Both classes have the same number of occurrences.")
+        print("---------------------------------------------------------")
+        return
+    print("---------------------------------------------------------")
+    print(f"Predicted class of the new instance: {TARGET_COLUMN} = {predict_the_class}")
+    print("---------------------------------------------------------")
+    print("Prediction completed.")
+    print("---------------------------------------------------------")
+
+
 # Start the program
 if __name__ == "__main__":
     # Enter the new instance
-    new_prediction_data = {'Outlook': 'Sunny', 'Temperature': 'Cool', 'Humidity': 'High', 'Wind': 'Strong'}
+    new_prediction_data = {'Outlook': 'Sunny', 'Temperature': 'Hot', 'Humidity': 'High', 'Wind': 'Strong'}
+    # Encode the new instance
+    new_prediction_data = encode_new_instance(new_prediction_data)
+    print('Encoded new instance:')
+    print(new_prediction_data)
     # Load the dataset
     data_set = load_data('data_set_play_tennis.json')
+    generate_encoded_json_file(data_set)
     # Summarize the dataset
     summarize_occurrences(data_set)
     # Ask parameters from the user
     assign_parameters()
     # Train the KNN model
-    training_model = train_knn_model(data_set, TARGET_COLUMN)
-    # Predict the result for each target column value
-    new_prediction_classes = []
-    for target_value in data_set[TARGET_COLUMN].unique():
-        print("---------------------------------------------------------")
-        print(f"Prediction for {target_value}:")
-        print("---------------------------------------------------------")
-        new_prediction_classes.append(predict_the_result(new_prediction_data, target_value))
-    # Print the results
-    print_results(new_prediction_classes)
+    knn_model = train_knn_model()
+    # Predict the class of the new instance
+    predict_result()
