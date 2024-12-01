@@ -108,12 +108,23 @@ def calculate_distance(instance, data, target_column):
     for target in data[target_column]:
         # Calculate the distance of the new instance and the current row
         print(f"Value: {target} - target_column: {target_column}")
-        for value in instance:
-            if value in data.columns:
+        for key, value in instance.items():
+            print(f"Key: {key} - Value: {value}")
+            if key in data.columns:
+                print(f"Value: {key} is in the columns.")
                 print(f"Value: {value} is in the columns.")
-                if data[value][j] == 1:
-                    distance += 1
-                    print(f"Distance: {distance}")
+                if data[key][j] == 1:
+                    # Calculate the distance in terms of Euclidean Distance
+                    # 0 for Euclidean Distance, 1 for Manhattan Distance
+                    # Give points for each value
+                    # Higher points are closer to the new instance
+                    if distance_metric == 0:
+                        distance += 1 - (data[key][j] - value) ** 2 # (data[value][j] - instance[value]) ** 2
+                    # Calculate the distance in terms of Manhattan Distance
+                    elif distance_metric == 1:
+                        distance += 1 - abs(data[key][j] - value) # abs(data[value][j] - instance[value])
+                    #distance += 1
+                    print(f"Distance Point: {distance}")
         j += 1
         distances.append(distance)
         distance = 0
@@ -241,6 +252,7 @@ def predict_result():
         print("No class has any occurrences.")
         print("---------------------------------------------------------")
         return
+    """
     # Check the equality of the values
     if knn_model['Yes'] == knn_model['No']:
         print("---------------------------------------------------------")
@@ -248,23 +260,49 @@ def predict_result():
         print("Both classes have the same number of occurrences.")
         print("---------------------------------------------------------")
         return
+    """
     print("---------------------------------------------------------")
     print(f"Predicted class of the new instance: {TARGET_COLUMN} = {predict_the_class}")
     print("---------------------------------------------------------")
     print("Prediction completed.")
+    return predict_the_class
+
+
+def update_model_json(new_instance, prediction):
+    # {"Day": 14, "Outlook": "Rain", "Temperature": "Mild", "Humidity": "High", "Wind": "Strong", "PlayTennis": "No"}
+    # Add new row in this format
+    # Create a dictionary for the new instance
+    # Append the new instance to the dataset
+    with open('data_set_play_tennis_updated.json', 'r') as file:
+        data_set_recent = json.load(file)
+        new_instance_dict = {'Day': data_set_recent[-1]['Day'] + 1}
+        for key, value in new_instance.items():
+            new_instance_dict[key.split('_')[0]] = key.split('_')[1]
+        new_instance_dict[TARGET_COLUMN] = prediction
+        data_set_recent.append(new_instance_dict)
+        # Write the updated dataset to the json file
+    with open('data_set_play_tennis_updated.json', 'w') as file:
+        json.dump(data_set_recent, file, indent=4)
+    print("Dataset is updated.")
     print("---------------------------------------------------------")
+    print("Updated Dataset:")
+    print(pd.read_json('data_set_play_tennis_updated.json'))
+    print("---------------------------------------------------------")
+
 
 
 # Start the program
 if __name__ == "__main__":
     # Enter the new instance
-    new_prediction_data = {'Outlook': 'Sunny', 'Temperature': 'Hot', 'Humidity': 'High', 'Wind': 'Strong'}
+    new_prediction_data = {'Outlook': 'Overcast', 'Temperature': 'Cool', 'Humidity': 'High', 'Wind': 'Strong'}
     # Encode the new instance
     new_prediction_data = encode_new_instance(new_prediction_data)
+    print("---------------------------------------------------------")
     print('Encoded new instance:')
     print(new_prediction_data)
     # Load the dataset
-    data_set = load_data('data_set_play_tennis.json')
+    data_set = load_data('data_set_play_tennis_updated.json')
+    # Generate the encoded json file
     generate_encoded_json_file(data_set)
     # Summarize the dataset
     summarize_occurrences(data_set)
@@ -273,4 +311,10 @@ if __name__ == "__main__":
     # Train the KNN model
     knn_model = train_knn_model()
     # Predict the class of the new instance
-    predict_result()
+    result = predict_result()
+    # Update dataset
+    print("---------------------------------------------------------")
+    print("Updating the dataset...")
+    print(data_set)
+    print("---------------------------------------------------------")
+    update_model_json(new_prediction_data, result)
