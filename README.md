@@ -1,4 +1,3 @@
-```markdown
 # K-Nearest Neighbors (k-NN) Classifier
 
 ## Introduction
